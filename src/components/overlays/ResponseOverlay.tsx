@@ -70,7 +70,7 @@ export function ResponseOverlay() {
               </div>
 
               <div className={`verdict ${investorResponse.funded ? 'funded' : 'rejected'}`}>
-                {investorResponse.funded ? '✓ Funded — They\'re in.' : '✗ Passed — Not this time.'}
+                {investorResponse.funded ? '✓ Funded — They\'re in.' : '✗ Rejected — Not this time.'}
               </div>
 
               <div className="objection-box">

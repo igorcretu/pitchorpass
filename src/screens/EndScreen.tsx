@@ -38,7 +38,7 @@ export function EndScreen() {
                 <span className="end-round-num">Round {i + 1}</span>
                 <span className="end-round-who">{r.investor_emoji} {r.investor_name.replace('The ', '')}</span>
                 <span className={`end-verdict ${r.won ? 'funded' : 'passed'}`}>
-                  {r.won ? '✓ Funded' : '✗ Passed'}
+                  {r.won ? '✓ Funded' : '✗ Rejected'}
                 </span>
               </div>
 

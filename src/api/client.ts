@@ -8,7 +8,7 @@ const ORIGIN = BASE.replace(/\/api$/, '')
 
 async function isBackendAvailable(): Promise<boolean> {
   try {
-    const res = await fetch(`${ORIGIN}/health`, { signal: AbortSignal.timeout(2000) })
+    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(2000) })
     return res.ok
   } catch {
     return false
