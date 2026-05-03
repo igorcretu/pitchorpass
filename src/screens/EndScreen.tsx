@@ -15,12 +15,14 @@ export function EndScreen() {
     ? wins === 5
       ? 'A perfect pitch. Every investor said yes.'
       : `${wins} of 5 believed in you. That's enough. Series A, here we come.`
-    : `Only ${wins} investor${wins === 1 ? '' : 's'} said yes. Study the patterns — the room always tells you what it wants.`
+    : wins === 0
+      ? `No investors said yes. Study the patterns — the room always tells you what it wants.`
+      : `Only ${wins} investor${wins === 1 ? '' : 's'} said yes. Study the patterns — the room always tells you what it wants.`
 
   return (
     <div className="screen-end">
       <div className="end-eyebrow">{playerName} · {wins}/5 Investors Funded You</div>
-      <div className={`end-title ${won ? 'win' : 'loss'}`}>{won ? 'FUNDED' : 'PASSED'}</div>
+      <div className={`end-title ${won ? 'win' : 'loss'}`}>{won ? 'FUNDED' : 'NOT FUNDED'}</div>
       <div className="end-sub">{subtitle}</div>
 
       <div className="end-breakdown">
