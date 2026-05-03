@@ -27,6 +27,8 @@ export interface RoundResult {
   investor_emoji: string
   startup_name: string
   round_num: number
+  cards_played: Card[]
+  investor_pref: string
 }
 
 export interface SessionState {

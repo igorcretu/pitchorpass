@@ -11,9 +11,6 @@ export function InvestorPanel() {
         <span className="investor-emoji">{currentInvestor.emoji}</span>
         {currentInvestor.name}
       </div>
-      <div className={`pref-badge ${currentInvestor.badge}`}>
-        Favours: {currentInvestor.pref_label}
-      </div>
       <div className="investor-hint">"{currentInvestor.hint}"</div>
     </div>
   )

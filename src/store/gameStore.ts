@@ -163,34 +163,36 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     if (!response) {
-      // local fallback with slight delay to simulate AI
       await new Promise(r => setTimeout(r, 1400 + Math.random() * 800))
       const inv = INVESTORS.find(i => i.name === currentInvestor!.name)!
-      const result = localEvaluate(inv, cards, repScore)
-      response = result
-
-      // update local state
-      const won = response.funded
-      const newRep = won ? Math.min(100, repScore + 5) : Math.max(20, repScore - 12)
-      const newResult: RoundResult = {
-        won,
-        investor_name: currentInvestor!.name,
-        investor_emoji: currentInvestor!.emoji,
-        startup_name: get().currentStartup!.name,
-        round_num: get().currentRound,
-      }
-      set({ repScore: newRep, results: [...get().results, newResult] })
-    } else {
-      // backend already updated rep + results, sync from backend if possible
-      if (sessionId) {
-        const updated = await api.getSession(sessionId)
-        if (updated) {
-          set({ repScore: updated.rep_score, results: updated.results })
-        }
-      }
+      response = localEvaluate(inv, cards, repScore)
     }
 
-    set({ investorResponse: response, isSubmitting: false })
+    const won = response.funded
+    const newRep = won ? Math.min(100, repScore + 5) : Math.max(20, repScore - 12)
+    const newResult: RoundResult = {
+      won,
+      investor_name: currentInvestor!.name,
+      investor_emoji: currentInvestor!.emoji,
+      startup_name: get().currentStartup!.name,
+      round_num: get().currentRound,
+      cards_played: cards,
+      investor_pref: currentInvestor!.pref_label,
+    }
+
+    // sync rep from backend but build results locally (richer data)
+    if (backendOnline && sessionId) {
+      const updated = await api.getSession(sessionId)
+      if (updated) {
+        set({ repScore: updated.rep_score })
+      } else {
+        set({ repScore: newRep })
+      }
+    } else {
+      set({ repScore: newRep })
+    }
+
+    set({ results: [...get().results, newResult], investorResponse: response, isSubmitting: false })
   },
 
   advance: async () => {
