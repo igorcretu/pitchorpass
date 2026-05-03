@@ -1,6 +1,6 @@
 export type CardType = 'ethos' | 'pathos' | 'logos'
 export type InvestorPref = 'ethos' | 'pathos' | 'logos' | 'mixed'
-export type Screen = 'landing' | 'setup' | 'game' | 'end'
+export type Screen = 'landing' | 'setup' | 'game' | 'end' | 'history'
 
 export interface Card {
   type: CardType

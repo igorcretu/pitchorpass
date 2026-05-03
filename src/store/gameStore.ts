@@ -31,6 +31,7 @@ interface GameStore {
 
   // Actions
   goToSetup: () => void
+  goToHistory: () => void
   setPlayerName: (name: string) => void
   startGame: () => Promise<void>
   resetGame: () => void
@@ -108,6 +109,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isSubmitting: false,
 
   goToSetup: () => set({ screen: 'setup' }),
+  goToHistory: () => set({ screen: 'history' }),
 
   setPlayerName: (name) => set({ playerName: name }),
 
