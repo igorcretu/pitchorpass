@@ -1,4 +1,4 @@
-import type { Card, InvestorResponse, SessionState } from '../types'
+import type { Card, InvestorResponse, SessionState, SpeechMetrics } from '../types'
 
 // In production (Netlify): set VITE_API_URL to your Cloudflare Tunnel URL, e.g.
 //   https://pitch-api.yourdomain.com/api
@@ -44,12 +44,13 @@ export async function submitPitch(
   sessionId: string,
   cards: Card[],
   transcript?: string,
+  metrics?: SpeechMetrics,
 ): Promise<InvestorResponse | null> {
   try {
     const res = await fetch(`${BASE}/sessions/${sessionId}/pitch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cards, transcript }),
+      body: JSON.stringify({ cards, transcript, speech_metrics: metrics }),
       signal: AbortSignal.timeout(30000),
     })
     if (!res.ok) return null
@@ -69,6 +70,22 @@ export async function advanceRound(sessionId: string): Promise<{ game_over: bool
     return res.json()
   } catch {
     return { game_over: false, state: null }
+  }
+}
+
+export async function transcribeAudio(blob: Blob): Promise<{ transcript: string; metrics: SpeechMetrics } | null> {
+  try {
+    const form = new FormData()
+    form.append('audio', blob, 'pitch.webm')
+    const res = await fetch(`${BASE}/speech/transcribe`, {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(30000),
+    })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
   }
 }
 

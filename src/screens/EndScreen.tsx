@@ -1,9 +1,15 @@
+import { useState } from 'react'
 import { useGameStore } from '../store/gameStore'
+import { loadHistory, exportHistoryJSON, exportSessionJSON, type GameRecord } from '../lib/history'
 
 export function EndScreen() {
   const { playerName, results, repScore, resetGame } = useGameStore()
   const wins = results.filter(r => r.won).length
   const won = wins >= 3
+  const [showHistory, setShowHistory] = useState(false)
+  const history: GameRecord[] = loadHistory()
+
+  const currentRecord = history[0]
 
   const subtitle = won
     ? wins === 5
@@ -28,15 +34,13 @@ export function EndScreen() {
             <div key={i} className={`end-round ${r.won ? 'won' : 'lost'}`}>
               <div className="end-round-header">
                 <span className="end-round-num">Round {i + 1}</span>
-                <span className="end-round-who">
-                  {r.investor_emoji} {r.investor_name.replace('The ', '')}
-                </span>
+                <span className="end-round-who">{r.investor_emoji} {r.investor_name.replace('The ', '')}</span>
                 <span className={`end-verdict ${r.won ? 'funded' : 'passed'}`}>
                   {r.won ? '✓ Funded' : '✗ Passed'}
                 </span>
               </div>
 
-              {r.cards_played && r.cards_played.length > 0 && (
+              {r.cards_played?.length > 0 && (
                 <div className="end-round-detail">
                   <div className="end-round-cards">
                     {r.cards_played.map((c, ci) => (
@@ -51,6 +55,26 @@ export function EndScreen() {
                       </span>
                     )}
                   </div>
+                </div>
+              )}
+
+              {r.ai_response && (
+                <div className="end-ai-block">
+                  <div className="end-ai-scores">
+                    <span className="score-pill ethos">E {r.ai_response.ethos}%</span>
+                    <span className="score-pill pathos">P {r.ai_response.pathos}%</span>
+                    <span className="score-pill logos">L {r.ai_response.logos}%</span>
+                  </div>
+                  <div className="end-ai-reaction">"{r.ai_response.reaction}"</div>
+                  {r.ai_response.objection && (
+                    <div className="end-ai-objection">↳ {r.ai_response.objection}</div>
+                  )}
+                  {r.transcript && (
+                    <details className="end-transcript">
+                      <summary>Your transcript</summary>
+                      <p>{r.transcript}</p>
+                    </details>
+                  )}
                 </div>
               )}
             </div>
@@ -69,10 +93,41 @@ export function EndScreen() {
       </div>
 
       <div className="end-actions">
-        <button className="btn-primary" style={{ width: 'auto' }} onClick={resetGame}>
-          Play Again
-        </button>
+        <button className="btn-primary" onClick={resetGame}>Play Again</button>
+        {currentRecord && (
+          <button className="btn-secondary" onClick={() => exportSessionJSON(currentRecord)}>
+            Export session ↓
+          </button>
+        )}
       </div>
+
+      {history.length > 1 && (
+        <div className="history-section">
+          <button className="history-toggle" onClick={() => setShowHistory(v => !v)}>
+            {showHistory ? '▲' : '▼'} Past sessions ({history.length})
+          </button>
+          {showHistory && (
+            <>
+              <div className="history-list">
+                {history.map((g, i) => (
+                  <div key={g.id} className="history-row">
+                    <span className="history-date">{new Date(g.date).toLocaleDateString()}</span>
+                    <span className="history-player">{g.playerName}</span>
+                    <span className={`history-result ${g.wins >= 3 ? 'win' : 'loss'}`}>
+                      {g.wins}/5
+                    </span>
+                    <span className="history-rep">rep {g.finalRepScore}</span>
+                    <button className="history-export-btn" onClick={() => exportSessionJSON(g)}>↓</button>
+                  </div>
+                ))}
+              </div>
+              <button className="btn-ghost" style={{ fontSize: '0.75rem' }} onClick={exportHistoryJSON}>
+                Export all history ↓
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

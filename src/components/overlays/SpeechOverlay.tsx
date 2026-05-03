@@ -3,36 +3,41 @@ import { useGameStore } from '../../store/gameStore'
 import { useTimer } from '../../hooks/useTimer'
 import { useSpeech } from '../../hooks/useSpeech'
 import { useWaveform } from '../../hooks/useWaveform'
+import { useAudioRecorder } from '../../hooks/useAudioRecorder'
+import { transcribeAudio } from '../../api/client'
+import type { SpeechMetrics } from '../../types'
 
 const PITCH_TIME = 90
 const CIRCUMFERENCE = 2 * Math.PI * 50
+const MIN_WORDS = 8
 
-type Phase = 'requesting' | 'recording' | 'denied'
+type Phase = 'requesting' | 'recording' | 'analyzing' | 'too-short' | 'denied'
+
+// Derive basic metrics from browser transcript when Whisper isn't available
+function localMetrics(text: string, durationSeconds: number): SpeechMetrics {
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  const wpm = durationSeconds > 0 ? Math.round((words.length / durationSeconds) * 60) : 0
+  const fillers = ['um', 'uh', 'like', 'you know', 'basically', 'kind of', 'sort of']
+  const filler_words = fillers.reduce((n, f) => n + (text.toLowerCase().split(f).length - 1), 0)
+  return { word_count: words.length, duration_seconds: Math.round(durationSeconds), wpm, filler_words, long_pauses: 0 }
+}
 
 export function SpeechOverlay() {
-  const { speechOverlayOpen, currentInvestor, closeSpeechOverlay, submitPitch } = useGameStore()
-  const { transcript, supported, start, stop, reset } = useSpeech()
+  const { speechOverlayOpen, currentInvestor, closeSpeechOverlay, submitPitch, backendOnline } = useGameStore()
+  const { transcript, supported, start: startSpeech, stop: stopSpeech, reset: resetSpeech } = useSpeech()
+  const { start: startRecorder, stop: stopRecorder, reset: resetRecorder } = useAudioRecorder()
   const [phase, setPhase] = useState<Phase>('requesting')
   const [stream, setStream] = useState<MediaStream | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [analysisMsg, setAnalysisMsg] = useState('')
   const streamRef = useRef<MediaStream | null>(null)
+  const startedAtRef = useRef<number>(0)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useWaveform(stream, canvasRef)
 
-  const handleExpire = () => {
-    stop()
-    submitPitch(transcript || undefined)
-  }
+  const handleExpire = () => stopAndSubmit()
 
   const { remaining, progress, start: startTimer, stop: stopTimer } = useTimer(PITCH_TIME, handleExpire)
-
-  const beginRecording = (s: MediaStream) => {
-    setStream(s)
-    streamRef.current = s
-    setPhase('recording')
-    startTimer()
-    if (supported) start()
-  }
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach(t => t.stop())
@@ -40,20 +45,33 @@ export function SpeechOverlay() {
     setStream(null)
   }
 
+  const beginRecording = (s: MediaStream) => {
+    setStream(s)
+    streamRef.current = s
+    setPhase('recording')
+    startedAtRef.current = Date.now()
+    startTimer()
+    if (supported) startSpeech()
+    startRecorder(s)
+  }
+
   useEffect(() => {
     if (!speechOverlayOpen) {
       stopTimer()
-      stop()
+      stopSpeech()
       stopStream()
+      resetSpeech()
+      resetRecorder()
       setPhase('requesting')
       return
     }
 
-    reset()
+    resetSpeech()
+    resetRecorder()
 
     if (!supported) {
-      // No mic support — skip permission, start timer immediately
       setPhase('recording')
+      startedAtRef.current = Date.now()
       startTimer()
       return
     }
@@ -63,19 +81,58 @@ export function SpeechOverlay() {
       .catch(() => setPhase('denied'))
   }, [speechOverlayOpen])
 
-  const handleDone = () => {
+  const stopAndSubmit = async () => {
     stopTimer()
-    stop()
+    stopSpeech()
+
+    const elapsed = (Date.now() - startedAtRef.current) / 1000
+    setPhase('analyzing')
+
+    const audioBlob = await stopRecorder()
+    const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length
+
+    if (wordCount < MIN_WORDS) {
+      stopStream()
+      setPhase('too-short')
+      return
+    }
+
+    let finalTranscript = transcript
+    let metrics: SpeechMetrics | undefined
+
+    if (backendOnline && audioBlob.size > 1000) {
+      setAnalysisMsg('Transcribing with Whisper…')
+      const result = await transcribeAudio(audioBlob)
+      if (result && result.transcript.trim().split(/\s+/).length >= MIN_WORDS) {
+        finalTranscript = result.transcript
+        metrics = result.metrics
+      }
+    }
+
+    if (!metrics) {
+      metrics = localMetrics(finalTranscript, elapsed)
+    }
+
     stopStream()
-    submitPitch(transcript || undefined)
+    submitPitch(finalTranscript, metrics)
   }
 
   const handleCancel = () => {
     stopTimer()
-    stop()
+    stopSpeech()
     stopStream()
-    reset()
+    resetSpeech()
+    resetRecorder()
     closeSpeechOverlay()
+  }
+
+  const handleRetry = () => {
+    resetSpeech()
+    resetRecorder()
+    setPhase('requesting')
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(beginRecording)
+      .catch(() => setPhase('denied'))
   }
 
   const dashOffset = CIRCUMFERENCE * (1 - progress)
@@ -106,9 +163,26 @@ export function SpeechOverlay() {
             <div className="mic-permission">
               <div className="mic-icon">🚫</div>
               <p>Microphone access denied.</p>
-              <p className="mic-sub">Your speech won't be transcribed, but you can still submit your pitch.</p>
-              <button className="btn-primary" style={{ marginTop: '1rem' }} onClick={handleDone}>
-                Submit without transcript →
+              <p className="mic-sub">Grant mic access in your browser settings, then try again.</p>
+              <button className="btn-secondary" style={{ marginTop: '1rem' }} onClick={handleCancel}>Cancel</button>
+            </div>
+          )}
+
+          {phase === 'analyzing' && (
+            <div className="mic-permission">
+              <div className="mic-icon" style={{ fontSize: '1.5rem' }}>⏳</div>
+              <p>{analysisMsg || 'Analyzing your pitch…'}</p>
+              <p className="mic-sub">Computing delivery metrics from your audio.</p>
+            </div>
+          )}
+
+          {phase === 'too-short' && (
+            <div className="mic-permission">
+              <div className="mic-icon">⚠️</div>
+              <p>Pitch too short.</p>
+              <p className="mic-sub">We didn't detect enough speech. Speak for at least 5–10 seconds.</p>
+              <button className="btn-primary" style={{ marginTop: '1rem' }} onClick={handleRetry}>
+                Re-record →
               </button>
               <button className="btn-secondary" style={{ marginTop: '0.5rem' }} onClick={handleCancel}>Cancel</button>
             </div>
@@ -152,7 +226,7 @@ export function SpeechOverlay() {
               </div>
 
               <div className="speech-actions">
-                <button className="btn-primary" onClick={handleDone}>Done — Submit Pitch →</button>
+                <button className="btn-primary" onClick={stopAndSubmit}>Done — Submit Pitch →</button>
                 <button className="btn-secondary" onClick={handleCancel}>Cancel</button>
               </div>
             </>

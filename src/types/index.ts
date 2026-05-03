@@ -29,6 +29,8 @@ export interface RoundResult {
   round_num: number
   cards_played: Card[]
   investor_pref: string
+  transcript?: string
+  ai_response?: InvestorResponse
 }
 
 export interface SessionState {
@@ -50,4 +52,12 @@ export interface InvestorResponse {
   logos: number
   funded: boolean
   objection: string
+}
+
+export interface SpeechMetrics {
+  word_count: number
+  duration_seconds: number
+  wpm: number
+  filler_words: number
+  long_pauses: number
 }

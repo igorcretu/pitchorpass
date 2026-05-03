@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import type { Card, InvestorData, InvestorResponse, RoundResult, Screen, SessionState, StartupData } from '../types'
+import type { Card, InvestorData, InvestorResponse, RoundResult, Screen, SessionState, SpeechMetrics, StartupData } from '../types'
 import { INVESTORS, shuffleDraw, pickStartup, localEvaluate } from '../data/gameData'
 import * as api from '../api/client'
+import { saveGame } from '../lib/history'
 
 interface GameStore {
   // Meta
@@ -38,7 +39,7 @@ interface GameStore {
   clearSelection: () => void
   openSpeechOverlay: () => void
   closeSpeechOverlay: () => void
-  submitPitch: (transcript?: string) => Promise<void>
+  submitPitch: (transcript?: string, metrics?: SpeechMetrics) => Promise<void>
   advance: () => Promise<void>
 }
 
@@ -73,6 +74,21 @@ function applySessionState(state: SessionState): Partial<GameStore> {
   }
 }
 
+// Key used to update the same game record across rounds
+let activeGameId: string | null = null
+
+function persistGame(playerName: string, results: RoundResult[], repScore: number) {
+  if (!activeGameId) activeGameId = crypto.randomUUID()
+  saveGame({
+    id: activeGameId,
+    date: new Date().toISOString(),
+    playerName,
+    wins: results.filter(r => r.won).length,
+    finalRepScore: repScore,
+    rounds: results,
+  })
+}
+
 export const useGameStore = create<GameStore>((set, get) => ({
   screen: 'landing',
   playerName: '',
@@ -96,6 +112,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setPlayerName: (name) => set({ playerName: name }),
 
   startGame: async () => {
+    activeGameId = null
     const { playerName } = get()
     const name = playerName.trim() || 'Founder'
 
@@ -150,7 +167,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   openSpeechOverlay: () => set({ speechOverlayOpen: true }),
   closeSpeechOverlay: () => set({ speechOverlayOpen: false }),
 
-  submitPitch: async (transcript) => {
+  submitPitch: async (transcript, metrics) => {
     const { sessionId, selectedCards, currentHand, currentInvestor, repScore, backendOnline } = get()
     const cards = selectedCards.map(i => currentHand[i as number])
 
@@ -159,7 +176,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let response: InvestorResponse | null = null
 
     if (backendOnline && sessionId) {
-      response = await api.submitPitch(sessionId, cards, transcript)
+      response = await api.submitPitch(sessionId, cards, transcript, metrics)
     }
 
     if (!response) {
@@ -178,9 +195,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       round_num: get().currentRound,
       cards_played: cards,
       investor_pref: currentInvestor!.pref_label,
+      transcript,
+      ai_response: response,
     }
 
-    // sync rep from backend but build results locally (richer data)
     if (backendOnline && sessionId) {
       const updated = await api.getSession(sessionId)
       if (updated) {
@@ -192,13 +210,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ repScore: newRep })
     }
 
-    set({ results: [...get().results, newResult], investorResponse: response, isSubmitting: false })
+    const updatedResults = [...get().results, newResult]
+    set({ results: updatedResults, investorResponse: response, isSubmitting: false })
+    persistGame(get().playerName, updatedResults, get().repScore)
   },
 
   advance: async () => {
-    const { sessionId, currentRound, backendOnline, usedStartups, repScore } = get()
+    const { sessionId, currentRound, backendOnline, usedStartups, repScore, playerName, results } = get()
 
     if (currentRound >= 4) {
+      activeGameId = null // reset so next game gets a fresh id
       set({ responseOverlayOpen: false, screen: 'end' })
       return
     }
@@ -208,6 +229,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (backendOnline && sessionId) {
       const result = await api.advanceRound(sessionId)
       if (result.game_over) {
+        activeGameId = null
         set({ responseOverlayOpen: false, screen: 'end' })
         return
       }
