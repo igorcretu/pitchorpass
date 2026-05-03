@@ -29,6 +29,7 @@ interface GameStore {
   isSubmitting: boolean
 
   // Actions
+  goToSetup: () => void
   setPlayerName: (name: string) => void
   startGame: () => Promise<void>
   resetGame: () => void
@@ -73,7 +74,7 @@ function applySessionState(state: SessionState): Partial<GameStore> {
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
-  screen: 'setup',
+  screen: 'landing',
   playerName: '',
   backendOnline: false,
   sessionId: null,
@@ -89,6 +90,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   responseOverlayOpen: false,
   investorResponse: null,
   isSubmitting: false,
+
+  goToSetup: () => set({ screen: 'setup' }),
 
   setPlayerName: (name) => set({ playerName: name }),
 
@@ -111,7 +114,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resetGame: () => set({
-    screen: 'setup',
+    screen: 'landing',
     sessionId: null,
     currentRound: 0,
     repScore: 100,

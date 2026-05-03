@@ -1,6 +1,5 @@
+# Build is handled by GitHub Actions — no command here
 [build]
-  base    = "."
-  command = "npm run build"
   publish = "dist"
 
 # SPA fallback — all routes serve index.html
